@@ -14,7 +14,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from config import settings
 from db import Database
 from analyzer import analyze_message
-from reports import build_daily_report, build_group_report
+from reports import build_daily_report
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("buxprime")
