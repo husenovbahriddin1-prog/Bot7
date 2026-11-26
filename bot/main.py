@@ -1,4 +1,5 @@
 import asyncio
+import html
 import logging
 import os
 from datetime import datetime
@@ -6,7 +7,8 @@ from zoneinfo import ZoneInfo
 
 from aiohttp import web
 from aiogram import Bot, Dispatcher, F
-from aiogram.enums import ChatType
+from aiogram.client.default import DefaultBotProperties
+from aiogram.enums import ChatType, ParseMode
 from aiogram.filters import Command
 from aiogram.types import Message
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -39,14 +41,14 @@ async def start_cmd(message: Message):
         await message.answer("Bu bot faqat tizim administratori uchun.")
         return
     await message.answer(
-        "Assalomu alaykum! <b>BuxPrime AI Controller</b> ishga tayyor.\\n\\n"
-        "/groups — ulangan guruhlar\\n"
-        "/report — barcha guruhlar bo‘yicha umumiy hisobot\\n"
-        "/problems — ochiq muammolar\\n"
-        "/questions — javobsiz savollar\\n"
-        "/responsible — mas’ullar va vazifalar\\n"
-        "/week — so‘nggi 7 kun tahlili\\n"
-        "/help — yordam"
+        "Assalomu alaykum! <b>BuxPrime AI Controller</b> ishga tayyor.\n\n"
+        "/groups – ulangan guruhlar\n"
+        "/report – barcha guruhlar bo‘yicha umumiy hisobot\n"
+        "/problems – ochiq muammolar\n"
+        "/questions – javobsiz savollar\n"
+        "/responsible – mas’ullar va vazifalar\n"
+        "/week – so‘nggi 7 kun tahlili\n"
+        "/help – yordam"
     )
 
 
@@ -70,8 +72,8 @@ async def groups_cmd(message: Message):
         return
     lines = ["<b>Ulangan guruhlar:</b>"]
     for g in groups:
-        lines.append(f"• {g['title']} (ID: <code>{g['chat_id']}</code>)")
-    await message.answer("\\n".join(lines))
+        lines.append(f"• {html.escape(g['title'])} (ID: <code>{g['chat_id']}</code>)")
+    await message.answer("\n".join(lines))
 
 
 @dp.message(Command("report"))
@@ -102,11 +104,12 @@ async def problems_cmd(message: Message):
         return
     lines = ["<b>Ochiq muammolar:</b>"]
     for x in items[:30]:
-        lines.append(
-            f"• <b>{x['group_title']}</b>: {x['title']}\\n"
-            f"  Holat: {x['status']} | Mas’ul: {x['responsible'] or 'Aniqlanmagan'}"
-        )
-    await message.answer("\\n".join(lines)[:4000])
+        grp = html.escape(x["group_title"])
+        ttl = html.escape(x["title"])
+        st = html.escape(str(x["status"]))
+        resp = html.escape(x["responsible"] or "Aniqlanmagan")
+        lines.append(f"• <b>{grp}</b>: {ttl}\n  Holat: {st} | Mas’ul: {resp}")
+    await message.answer("\n".join(lines)[:4000])
 
 
 @dp.message(Command("questions"))
@@ -119,8 +122,11 @@ async def questions_cmd(message: Message):
         return
     lines = ["<b>Javobsiz savollar:</b>"]
     for x in items[:30]:
-        lines.append(f"• <b>{x['group_title']}</b>: {x['question']}\\n  Kim so‘radi: {x['asked_by'] or 'Noma’lum'}")
-    await message.answer("\\n".join(lines)[:4000])
+        grp = html.escape(x["group_title"])
+        qst = html.escape(x["question"])
+        ask = html.escape(x["asked_by"] or "Noma’lum")
+        lines.append(f"• <b>{grp}</b>: {qst}\n  Kim so‘radi: {ask}")
+    await message.answer("\n".join(lines)[:4000])
 
 
 @dp.message(Command("responsible"))
@@ -133,8 +139,12 @@ async def responsible_cmd(message: Message):
         return
     lines = ["<b>Mas’ullar nazorati:</b>"]
     for x in items[:30]:
-        lines.append(f"• {x['group_title']}: {x['title']} — {x['responsible'] or 'Aniqlanmagan'} ({x['status']})")
-    await message.answer("\\n".join(lines)[:4000])
+        grp = html.escape(x["group_title"])
+        ttl = html.escape(x["title"])
+        resp = html.escape(x["responsible"] or "Aniqlanmagan")
+        st = html.escape(str(x["status"]))
+        lines.append(f"• {grp}: {ttl} – {resp} ({st})")
+    await message.answer("\n".join(lines)[:4000])
 
 
 @dp.message(F.chat.type.in_({ChatType.GROUP, ChatType.SUPERGROUP}))
@@ -158,8 +168,6 @@ async def group_message_handler(message: Message):
         sent_at=message.date,
     )
 
-    # AI analysis is intentionally limited to text/captions to avoid treating
-    # unsupported media as confirmed facts.
     try:
         context = await db.recent_messages(chat.id, limit=25)
         result = await analyze_message(
@@ -177,7 +185,7 @@ async def daily_report_job():
     try:
         report = await build_daily_report(db, days=1)
         if report:
-            await send_admin("<b>BuxPrime — kunlik guruhlar tahlili</b>\\n\\n" + report[:3900])
+            await send_admin("<b>BuxPrime – kunlik guruhlar tahlili</b>\n\n" + report[:3900])
     except Exception:
         log.exception("Daily report failed")
 
@@ -201,7 +209,10 @@ async def run_web():
 async def main():
     global bot
     settings.validate()
-    bot = Bot(token=settings.bot_token)
+    bot = Bot(
+        token=settings.bot_token,
+        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+    )
     await db.connect()
     await db.create_tables()
 
