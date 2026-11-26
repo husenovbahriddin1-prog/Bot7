@@ -1,4 +1,6 @@
+import html
 from db import Database
+
 
 async def build_daily_report(db: Database, days=1):
     groups, issues, questions, solved_count, tasks = await db.report_data(days)
@@ -6,29 +8,65 @@ async def build_daily_report(db: Database, days=1):
         return "Hozircha bot kuzatayotgan guruhlar yo‘q."
 
     title = "SO‘NGGI 7 KUN" if days == 7 else "BUGUNGI HOLAT"
-    lines = [f"<b>{title}</b>", f"Ulangan guruhlar: {len(groups)}",
-             f"Ochiq muammolar: {len(issues)} | Javobsiz savollar: {len(questions)}",
-             f"Hal qilingan muammolar: {solved_count}", ""]
 
-    lines.append("<b>Guruhlar kesimida:</b>")
+    summary_table = (
+        "+-------------------------+--------+\n"
+        "| Ko'rsatkich             | Soni   |\n"
+        "+-------------------------+--------+\n"
+        f"| Ulangan guruhlar        | {len(groups):<6} |\n"
+        f"| Ochiq muammolar         | {len(issues):<6} |\n"
+        f"| Javobsiz savollar       | {len(questions):<6} |\n"
+        f"| Hal qilingan muammolar  | {solved_count:<6} |\n"
+        "+-------------------------+--------+"
+    )
+
+    group_rows = [
+        "+----------------------+-------+-------+",
+        "| Guruh nomi           | Muam. | Savol |",
+        "+----------------------+-------+-------+",
+    ]
     for g in groups:
         g_issues = [x for x in issues if x["chat_id"] == g["chat_id"]]
         g_questions = [x for x in questions if x["chat_id"] == g["chat_id"]]
-        lines.append(f"• <b>{g['title']}</b>: {len(g_issues)} ochiq muammo, {len(g_questions)} javobsiz savol")
+        g_name = html.escape(g["title"][:20])
+        group_rows.append(
+            f"| {g_name:<20} | {len(g_issues):<5} | {len(g_questions):<5} |"
+        )
+    group_rows.append("+----------------------+-------+-------+")
+
+    lines = [
+        f"<b>📊 {title}</b>",
+        f"<pre>{summary_table}</pre>",
+        "<b>Guruhlar kesimida:</b>",
+        "<pre>" + "\n".join(group_rows) + "</pre>",
+    ]
 
     if issues:
-        lines += ["", "<b>Ochiq muammolar:</b>"]
+        lines.append("\n<b>⚠️ Ochiq muammolar:</b>")
         for x in issues[:15]:
-            lines.append(f"• {x['group_title']}: {x['title']} — mas’ul: {x['responsible'] or 'aniqlanmagan'}")
-    if questions:
-        lines += ["", "<b>Javobsiz savollar:</b>"]
-        for x in questions[:15]:
-            lines.append(f"• {x['group_title']}: {x['question']} — so‘ragan: {x['asked_by'] or 'noma’lum'}")
-    if tasks:
-        lines += ["", "<b>Bajarilishi kutilayotgan vazifalar:</b>"]
-        for x in tasks[:15]:
-            lines.append(f"• {x['group_title']}: {x['title']} — {x['responsible'] or 'mas’ul aniqlanmagan'}")
+            grp = html.escape(x["group_title"])
+            ttl = html.escape(x["title"])
+            resp = html.escape(x["responsible"] or "aniqlanmagan")
+            lines.append(f"• <b>{grp}</b>: {ttl} — <i>mas’ul: {resp}</i>")
 
-    lines += ["", "<i>Eslatma: AI xulosalari guruh xabarlaridagi dalillarga asoslanadi. "
-              "Noaniq mas’ul yoki yechim tasdiqlanmagan deb ko‘rsatilishi kerak.</i>"]
-    return "\\n".join(lines)
+    if questions:
+        lines.append("\n<b>❓ Javobsiz savollar:</b>")
+        for x in questions[:15]:
+            grp = html.escape(x["group_title"])
+            qst = html.escape(x["question"])
+            ask = html.escape(x["asked_by"] or "noma’lum")
+            lines.append(f"• <b>{grp}</b>: {qst} — <i>so‘ragan: {ask}</i>")
+
+    if tasks:
+        lines.append("\n<b>📌 Bajarilishi kutilayotgan vazifalar:</b>")
+        for x in tasks[:15]:
+            grp = html.escape(x["group_title"])
+            ttl = html.escape(x["title"])
+            resp = html.escape(x["responsible"] or "mas’ul aniqlanmagan")
+            lines.append(f"• <b>{grp}</b>: {ttl} — <i>{resp}</i>")
+
+    lines.append(
+        "\n<i>Eslatma: AI xulosalari guruh xabarlaridagi dalillarga asoslanadi. "
+        "Noaniq mas’ul yoki yechim tasdiqlanmagan deb ko‘rsatilishi kerak.</i>"
+    )
+    return "\n".join(lines)
